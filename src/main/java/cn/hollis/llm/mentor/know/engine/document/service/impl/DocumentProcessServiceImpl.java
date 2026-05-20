@@ -110,8 +110,13 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             }
 
             if (document.getKnowledgeBaseType() == KnowledgeBaseType.DOCUMENT_SEARCH) {
-                document.setStatus(DocumentStatus.CONVERTED);
-                document.setConvertedDocUrl(fileUrl);
+                // 如果FileProcessService已经设置了convertedDocUrl（如MinerU解析后的md），不要覆盖
+                if (document.getConvertedDocUrl() == null) {
+                    document.setConvertedDocUrl(fileUrl);
+                }
+                if (document.getStatus() == DocumentStatus.UPLOADED) {
+                    document.setStatus(DocumentStatus.CONVERTED);
+                }
                 result = knowledgeDocumentService.updateById(document);
                 Assert.isTrue(result, "文件状态更新失败");
             } else {

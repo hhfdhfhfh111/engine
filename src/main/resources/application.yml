@@ -75,13 +75,13 @@ mybatis-plus:
 langchain4j:
   open-ai:
     chat-model:
-      api-key: ${DASHSCOPE_API_KEY}
+      api-key: sk-3c2c69f23adc4637821243d8003ec27a
       model-name: qwen-max-latest
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       log-requests: true
       log-responses: true
     streaming-chat-model:
-      api-key: ${DASHSCOPE_API_KEY}
+      api-key: sk-3c2c69f23adc4637821243d8003ec27a
       model-name: qwen-max-latest
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       log-requests: true
@@ -98,7 +98,7 @@ elasticsearch:
   host: http://192.168.79.101:9200
   base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
   model-name: text-embedding-v4
-  api-key: ${DASHSCOPE_API_KEY}
+  api-key: sk-3c2c69f23adc4637821243d8003ec27a
   dimensions: 1536
 
 minio:
