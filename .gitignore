@@ -1,0 +1,17 @@
+target/
+*.class
+*.jar
+*.war
+*.zip
+*.tar.gz
+*.log
+.DS_Store
+.idea/
+*.iml
+
+# Environment specific
+.env
+.env.local
+
+# Maven build output
+log/
