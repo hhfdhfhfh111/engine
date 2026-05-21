@@ -140,17 +140,18 @@ public class MarkdownHeaderParentTextSplitter implements DocumentSplitter {
      * @return 带有元数据的文档片段列表
      */
     private List<DocumentWithMetadata> splitWithMetadata(String text, Map<String, Object> baseMetadata) {
-        List<String> lines = Arrays.asList(text.split("\n"));
+        List<String> lines = Arrays.asList(text.split("\n"));// 按行分割文本
         List<Line> linesWithMetadata = new ArrayList<>();
-        List<String> currentContent = new ArrayList<>();
-        Map<String, Object> currentMetadata = new HashMap<>(baseMetadata);
+        List<String> currentContent = new ArrayList<>();// 当前分段的内容列表
+        Map<String, Object> currentMetadata = new HashMap<>(baseMetadata);//当前正在累积的非标题内容
         List<Header> headerStack = new ArrayList<>();  // 标题栈，用于追踪当前的标题层级结构
-        Map<String, Object> initialMetadata = new HashMap<>(baseMetadata);
+        Map<String, Object> initialMetadata = new HashMap<>(baseMetadata);// 初始元数据，用于记录每个分段的元数据
 
         boolean inCodeBlock = false;  // 是否在代码块中
         String openingFence = "";     // 代码块的开始标记
 
         for (String line : lines) {
+            // 去除行首和行尾的空白字符
             String strippedLine = line.trim();
 
             // 处理代码块标记，代码块内的内容不作为标题处理
