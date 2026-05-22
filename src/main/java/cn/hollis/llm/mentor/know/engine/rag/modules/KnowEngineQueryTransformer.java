@@ -59,6 +59,7 @@ public class KnowEngineQueryTransformer implements QueryTransformer {
 
     protected final ChatModel chatModel;
 
+
     protected final PromptTemplate promptTemplate;
 
     /**
@@ -196,6 +197,9 @@ public class KnowEngineQueryTransformer implements QueryTransformer {
         return singletonList(compressedQuery);
     }
 
+    /**
+     * 创建改写提示
+     */
     protected Prompt createPrompt(Query query, String chatMemory) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("query", query.text());
@@ -203,6 +207,9 @@ public class KnowEngineQueryTransformer implements QueryTransformer {
         return promptTemplate.apply(variables);
     }
 
+    /**
+     * 格式化历史对话记忆
+     */
     protected String format(List<ChatMessage> chatMemory) {
         return chatMemory.stream()
                 .map(this::format)
@@ -210,6 +217,9 @@ public class KnowEngineQueryTransformer implements QueryTransformer {
                 .collect(joining("\n"));
     }
 
+    /**
+     * 格式化单个历史对话记忆
+     */
     protected String format(ChatMessage message) {
         if (message instanceof UserMessage userMessage) {
             return "User: " + userMessage.singleText();

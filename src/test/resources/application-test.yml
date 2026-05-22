@@ -11,9 +11,9 @@ spring:
       max-request-size: 100MB
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
-    url: jdbc:mysql://127.0.0.1:3306/know_engine?useUnicode=true&characterEncoding=UTF-8&rewriteBatchedStatements=true
+    url: jdbc:mysql://192.168.79.101:3306/know_engine?useUnicode=true&characterEncoding=UTF-8&rewriteBatchedStatements=true
     username: know_engine
-    password: ${MYSQL_PASSWORD:know_engine}
+    password: ${MYSQL_PASSWORD:123}
     driver-class-name: com.mysql.cj.jdbc.Driver
     druid:
       initial-size: 2
@@ -22,9 +22,9 @@ spring:
       max-wait: 60000
   data:
     redis:
-      host: localhost
+      host: 192.168.79.101
       port: 6379
-      password: ${REDIS_PASSWORD:knowengine}
+      password: ${REDIS_PASSWORD:123456}
       ssl:
         enabled: true
   redis:
@@ -36,9 +36,9 @@ spring:
           timeout: 3000
           retryAttempts: 3
           retryInterval: 1500
-          password: ${REDIS_PASSWORD:knowengine}
+          password: ${REDIS_PASSWORD:123456}
           subscriptionsPerConnection: 5
-          address: "redis://localhost:6379"
+          address: "redis://192.168.79.101:6379"
           database: 0
         threads: 4
         nettyThreads: 8
@@ -54,13 +54,13 @@ mybatis-plus:
 langchain4j:
   open-ai:
     chat-model:
-      api-key: ${DASHSCOPE_API_KEY}
+      api-key: sk-3c2c69f23adc4637821243d8003ec27a
       model-name: qwen-max-latest
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       log-requests: true
       log-responses: true
     streaming-chat-model:
-      api-key: ${DASHSCOPE_API_KEY}
+      api-key: sk-3c2c69f23adc4637821243d8003ec27a
       model-name: qwen-max-latest
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       log-requests: true

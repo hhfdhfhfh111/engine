@@ -168,6 +168,7 @@ public class ChatApplicationService {
                     // 构建查询改写器（带进度回调）
                     KnowEngineQueryTransformer queryTransformer = new KnowEngineQueryTransformer(chatModel, chatParam.messageId(), processCallback);
 
+                    // 构建嵌入式检索器（带进度回调）
                     ProgressAwareContentRetriever embeddingRetriever = new ProgressAwareContentRetriever(KnowEngineElasticsearchContentRetriever.builder()
                             .configuration(ElasticsearchConfigurationKnn.builder().build())
                             .maxResults(5)
@@ -177,14 +178,14 @@ public class ChatApplicationService {
                             .indexName(INDEX_NAME)
                             .knowledgeSegmentService(knowledgeSegmentService)
                             .build(), processCallback);
-
+                    // 构建全文检索器（带进度回调）
                     ProgressAwareContentRetriever fullTextRetriever = new ProgressAwareContentRetriever(ElasticsearchContentRetriever.builder()
                             .configuration(ElasticsearchConfigurationFullText.builder().build())
                             .restClient(restClient)
                             .indexName(INDEX_NAME)
                             .maxResults(5)
                             .build(), processCallback);
-
+                    // 构建 SQL 检索器（带进度回调）
                     ProgressAwareContentRetriever sqlRetriever = null;
                     try {
                         // 拼接静态表结构 + table_meta 中动态创建的表结构
@@ -201,6 +202,7 @@ public class ChatApplicationService {
                         log.warn("Error creating SQL retriever", e);
                     }
 
+                    // 构建 Neo4j 检索器（带进度回调）
                     ProgressAwareContentRetriever neo4jRetriever = new ProgressAwareContentRetriever(Neo4jText2CypherRetriever.builder()
                             .graph(Neo4jGraph.builder()
                                     .driver(neo4jDriver)
@@ -208,9 +210,10 @@ public class ChatApplicationService {
                             .chatModel(chatModel)
                             .build(), processCallback);
 
+                    // 构建评分模型（带进度回调）
                     OnnxScoringModel scoringModel = BgeScoringModel.getInstance();
 
-                    // 使用带进度通知的聚合器包装原始聚合器
+                    //  构建内容聚合器（带进度回调）
                     ContentAggregator contentAggregator = new ProgressAwareContentAggregator(
                             ReRankingContentAggregator.builder()
                                     .scoringModel(scoringModel)
@@ -220,8 +223,10 @@ public class ChatApplicationService {
                             processCallback, chatParam.assistantMessageId(), chatMessageService
                     );
 
+                    // 构建系统消息（带进度回调）
                     String prompt = promptService.getPrompt(chatParam.intentRecognitionResult());
 
+                    // 构建内容注入器（带进度回调）
                     ContentInjector contentInjector = new DefaultContentInjector();
 
                     // 构建查询路由器（带进度回调）
@@ -231,7 +236,7 @@ public class ChatApplicationService {
                             .contentAggregator(contentAggregator)
                             .contentInjector(contentInjector)
                             .build();
-
+                    // 构建聊天服务（带进度回调）
                     KnowEngineChatAiService knowEngineChatAiService = AiServices.builder(KnowEngineChatAiService.class)
                             .chatModel(chatModel)
                             .streamingChatModel(streamingChatModel)
