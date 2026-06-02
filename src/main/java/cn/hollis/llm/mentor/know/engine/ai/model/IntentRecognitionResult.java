@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 /**
  * 意图识别结果
  *
- * @author Hollis
  */
 public record IntentRecognitionResult(
         @JsonPropertyDescription("意图识别的推断理由")

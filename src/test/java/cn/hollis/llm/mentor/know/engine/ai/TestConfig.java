@@ -23,7 +23,6 @@ import static org.mockito.Mockito.when;
  * 测试配置类
  * 用于排除 Elasticsearch 相关组件，避免测试时连接 ES
  *
- * @author Hollis
  */
 @TestConfiguration
 @Import({

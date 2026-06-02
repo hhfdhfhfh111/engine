@@ -8,7 +8,6 @@ package cn.hollis.llm.mentor.know.engine.infra.snowflake;
  * - 10位工作机器ID（0-1023）
  * - 12位序列号（毫秒内自增，每毫秒可生成4096个ID）
  *
- * @author Hollis
  */
 public class SnowflakeIdGenerator {
 

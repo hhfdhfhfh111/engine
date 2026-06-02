@@ -22,7 +22,6 @@ import java.util.*;
 /**
  * 意图识别测试
  *
- * @author Hollis
  */
 @SpringBootTest
 @ActiveProfiles("test")

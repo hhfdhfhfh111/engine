@@ -3,7 +3,6 @@ package cn.hollis.llm.mentor.know.engine.chat.constant;
 /**
  * 消息类型
  *
- * @author Hollis
  */
 public enum ChatMessageType {
 

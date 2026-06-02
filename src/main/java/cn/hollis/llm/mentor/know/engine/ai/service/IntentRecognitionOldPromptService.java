@@ -8,7 +8,6 @@ import dev.langchain4j.service.spring.AiService;
 /**
  * 意图识别服务 - 使用旧版提示词（用于对比测试）
  *
- * @author Hollis
  */
 @AiService
 public interface IntentRecognitionOldPromptService {

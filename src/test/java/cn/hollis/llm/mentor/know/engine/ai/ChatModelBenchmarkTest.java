@@ -18,7 +18,6 @@ import java.util.Map;
  * <p>
  * 注意：本测试会实际调用LLM API产生费用，默认@Disabled，需要手动运行。
  *
- * @author Hollis
  */
 @Disabled("集成测试，需要手动运行，会调用LLM API产生费用")
 public class ChatModelBenchmarkTest {
