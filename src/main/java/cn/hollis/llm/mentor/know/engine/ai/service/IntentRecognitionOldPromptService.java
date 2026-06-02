@@ -7,7 +7,7 @@ import dev.langchain4j.service.spring.AiService;
 
 /**
  * 意图识别服务 - 使用旧版提示词（用于对比测试）
- *
+ * 用于和新版提示词做 A/B 对比测试，评估提示词优化效果
  */
 @AiService
 public interface IntentRecognitionOldPromptService {

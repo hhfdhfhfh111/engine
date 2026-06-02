@@ -2,6 +2,7 @@ package cn.hollis.llm.mentor.know.engine.rag.constant;
 
 /**
  * 元数据的键常量
+ * 统一管理分段检索、权限控制等场景的元数据字段名
  */
 public class MetadataKeyConstant {
     /**

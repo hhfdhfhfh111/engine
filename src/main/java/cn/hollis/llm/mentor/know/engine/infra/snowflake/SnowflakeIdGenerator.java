@@ -7,7 +7,7 @@ package cn.hollis.llm.mentor.know.engine.infra.snowflake;
  * - 41位时间戳（毫秒级，可使用约69年）
  * - 10位工作机器ID（0-1023）
  * - 12位序列号（毫秒内自增，每毫秒可生成4096个ID）
- *
+ * 单例模式，保证全局ID唯一性
  */
 public class SnowflakeIdGenerator {
 

@@ -17,7 +17,7 @@ import java.util.Map;
  * 分别调用不同的LLM模型，比较返回结果和响应时间。
  * <p>
  * 注意：本测试会实际调用LLM API产生费用，默认@Disabled，需要手动运行。
- *
+ * 用于对比不同模型的响应质量和耗时表现，辅助模型选型决策
  */
 @Disabled("集成测试，需要手动运行，会调用LLM API产生费用")
 public class ChatModelBenchmarkTest {

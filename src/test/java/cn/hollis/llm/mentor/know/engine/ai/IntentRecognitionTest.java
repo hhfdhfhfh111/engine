@@ -21,7 +21,7 @@ import java.util.*;
 
 /**
  * 意图识别测试
- *
+ * 包含新版/旧版提示词对比、易混淆场景、边界场景及实体提取专项测试
  */
 @SpringBootTest
 @ActiveProfiles("test")

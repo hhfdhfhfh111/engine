@@ -17,7 +17,7 @@ import static cn.hollis.llm.mentor.know.engine.rag.constant.MetadataKeyConstant.
  * 支持保留元数据、父子分段关系等高级特性
  *
  * @author andyflury （https://github.com/langchain4j/langchain4j/issues/574 ）
- * 增加对父子分段的支持
+ * 支持 chunkSize 超限二次切割，生成同级分段关系，检索时可拼接还原上下文
  */
 public class MarkdownHeaderBrotherTextSplitter implements DocumentSplitter {
 

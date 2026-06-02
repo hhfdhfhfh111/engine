@@ -22,7 +22,7 @@ import static org.mockito.Mockito.when;
 /**
  * 测试配置类
  * 用于排除 Elasticsearch 相关组件，避免测试时连接 ES
- *
+ * 通过 Mock 隔离外部依赖（ES、数据库），确保单测可独立运行
  */
 @TestConfiguration
 @Import({

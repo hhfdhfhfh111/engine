@@ -54,40 +54,58 @@ import java.util.List;
 @Service
 public class DocumentProcessServiceImpl implements DocumentProcessService {
 
+    /** 文档元数据 CRUD 服务 */
     @Autowired
     private KnowledgeDocumentService knowledgeDocumentService;
 
+    /** MinIO 文件存储服务 */
     @Autowired
     private FileStorageService fileStorageService;
 
+    /** 文件处理策略工厂，按文件类型/知识库类型路由不同的处理逻辑 */
     @Autowired
     private FileProcessServiceFactory fileProcessServiceFactory;
 
+    /** 文档分段 CRUD 服务 */
     @Autowired
     private KnowledgeSegmentService knowledgeSegmentService;
 
+    /** Elasticsearch 向量存储 */
     @Autowired
     private ElasticsearchEmbeddingStore elasticsearchEmbeddingStore;
 
+    /** OpenAI 兼容的 Embedding 模型 */
     @Autowired
     private OpenAiEmbeddingModel openAiEmbeddingModel;
 
+    /** Spring 事件发布器，用于文档处理各阶段的异步通知 */
     @Autowired
     private ApplicationEventPublisher eventPublisher;
 
+    /** MinIO 桶名 */
     @Value("${minio.bucketName}")
     private String bucketName;
 
+    /**
+     * 文档上传处理流程：
+     * 1. 将原始文件上传到 MinIO
+     * 2. 创建文档元数据记录（状态：UPLOADED）
+     * 3. 根据文件类型/知识库类型路由到对应的 FileProcessService 做预处理（如格式转换）
+     * 4. 根据知识库类型更新文档最终状态（CONVERTED / STORED）
+     * <p>
+     * 使用分布式锁防止同一用户并发上传冲突。
+     */
     @Override
     @DistributeLock(scene = "document-upload", keyExpression = "#documentUploadParam.uploadUser", waitTime = 0)
     public KnowledgeDocument upload(DocumentUploadParam documentUploadParam) throws IOException {
         try {
             log.info("start to upload ....");
             String fileName = documentUploadParam.file().getOriginalFilename();
-            // 用minio上传
+
+            // Step 1: 上传原始文件到 MinIO
             String fileUrl = fileStorageService.uploadFile(documentUploadParam.file(), fileName);
 
-            // 构建文档记录
+            // Step 2: 构建文档记录并持久化
             KnowledgeDocument document = new KnowledgeDocument();
             document.setDocTitle(documentUploadParam.title());
             document.setUploadUser(documentUploadParam.uploadUser());
@@ -98,19 +116,21 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             document.setKnowledgeBaseType(KnowledgeBaseType.valueOf(documentUploadParam.knowledgeBaseType()));
             document.setTableName(documentUploadParam.tableName());
 
-            // 保存到数据库
             boolean result = knowledgeDocumentService.save(document);
             Assert.isTrue(result, "文件上传失败");
 
-            // 调用不同的文件处理服务
-            FileProcessService fileProcessService = fileProcessServiceFactory.get(FileTypeUtil.getFileType(fileName, documentUploadParam.file()), document.getKnowledgeBaseType());
-            // 调用文件处理服务处理文档
+            // Step 3: 按文件类型/知识库类型分发到对应的文件处理服务（如 PDF→Markdown 转换）
+            FileProcessService fileProcessService = fileProcessServiceFactory.get(
+                    FileTypeUtil.getFileType(fileName, documentUploadParam.file()),
+                    document.getKnowledgeBaseType());
             if (fileProcessService != null) {
                 fileProcessService.processDocument(document, documentUploadParam.file().getInputStream());
             }
 
+            // Step 4: 更新文档状态
             if (document.getKnowledgeBaseType() == KnowledgeBaseType.DOCUMENT_SEARCH) {
-                // 如果FileProcessService已经设置了convertedDocUrl（如MinerU解析后的md），不要覆盖
+                // 文档检索模式：文件需要经过转换 → 分段 → 向量化流程
+                // 若 FileProcessService 已写入 convertedDocUrl（如 MinerU 解析后的 md），则保留不覆盖
                 if (document.getConvertedDocUrl() == null) {
                     document.setConvertedDocUrl(fileUrl);
                 }
@@ -120,6 +140,7 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
                 result = knowledgeDocumentService.updateById(document);
                 Assert.isTrue(result, "文件状态更新失败");
             } else {
+                // 非文档检索模式：直接标记为已存储，无需后续分段/向量化
                 document.setStatus(DocumentStatus.STORED);
                 document.setConvertedDocUrl(fileUrl);
                 result = knowledgeDocumentService.updateById(document);
@@ -131,17 +152,34 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
         }
     }
 
+    /**
+     * 文档分段处理流程：
+     * 1. 校验文档状态（必须是 CONVERTED）
+     * 2. 从 MinIO 下载已转换的文档内容
+     * 3. 根据文件类型选择分段器（Excel/CSV 走 ExcelSplitter，其余走工厂策略）
+     * 4. 将分段结果转换为 KnowledgeSegment 并批量持久化
+     * 5. 更新文档状态为 CHUNKED，发布分段完成事件
+     * <p>
+     * 幂等处理：若文档已处于 CHUNKED 状态，直接返回已有分段数量。
+     * 使用分布式锁防止同一文档并发分段。
+     *
+     * @param document          文档实体
+     * @param documentSplitParam 分段参数（策略、大小、重叠等）
+     * @return 分段数量
+     */
     @Override
     @Transactional
     @DistributeLock(scene = "document-split", keyExpression = "#document.docId", waitTime = 0)
     public int split(KnowledgeDocument document, DocumentSplitParam documentSplitParam) {
-        // 1. 查询文档
+        // Step 1: 校验文档状态
         Assert.notNull(document, "文档不存在");
         Assert.notNull(document.getConvertedDocUrl(), "文档未转换完成");
 
+        // 幂等：已分段则直接返回已有分段数
         if (document.getStatus() == DocumentStatus.CHUNKED) {
-            // 返回已切分的分段数量
-            Long chunkedCount = knowledgeSegmentService.count(new QueryWrapper<KnowledgeSegment>().eq("document_id", document.getDocId()).eq("skipEmbedding", 0));
+            Long chunkedCount = knowledgeSegmentService.count(new QueryWrapper<KnowledgeSegment>()
+                    .eq("document_id", document.getDocId())
+                    .eq("skipEmbedding", 0));
             return chunkedCount.intValue();
         }
 
@@ -149,20 +187,22 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             throw new RuntimeException("文档状态不为CONVERTED，无法完成切分");
         }
 
-        // 2. 从MinIO下载文件内容
+        // Step 2: 从 MinIO 下载已转换后的文档内容
         String convertedDocUrl = document.getConvertedDocUrl();
-
         String objectName = extractObjectNameFromUrl(convertedDocUrl);
         Assert.notNull(objectName, "无法解析文档URL");
 
+        // Step 3: 按文件类型选择分段策略
         List<KnowledgeSegment> knowledgeSegments = new ArrayList<>();
         List<TextSegment> segments = new ArrayList<>();
         try (InputStream inputStream = fileStorageService.downloadFile(objectName)) {
-            //EXCEL单独处理，因为他不是Document类型
-            if (FileType.EXCEL == FileTypeUtil.getFileType(document.getConvertedDocUrl()) || FileType.CSV == FileTypeUtil.getFileType(document.getConvertedDocUrl())) {
+            if (FileType.EXCEL == FileTypeUtil.getFileType(document.getConvertedDocUrl())
+                    || FileType.CSV == FileTypeUtil.getFileType(document.getConvertedDocUrl())) {
+                // Excel/CSV 使用专用分段器，按行/按表分段
                 ExcelSplitter splitter = new ExcelSplitter(documentSplitParam.chunkSize(), false);
                 segments = splitter.split(inputStream.readAllBytes());
             } else {
+                // Markdown/文本等使用工厂创建的通用分段器
                 DocumentSplitter splitter = DocumentSplitterFactory.getInstance(documentSplitParam);
                 Document doc = Document.from(new String(inputStream.readAllBytes(), StandardCharsets.UTF_8));
                 segments = splitter.split(doc);
@@ -171,7 +211,7 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             throw new RuntimeException("下载文档失败: " + e.getMessage(), e);
         }
 
-        // 4. 转换为 KnowledgeSegment 并保存
+        // Step 4: 将分段转换为 KnowledgeSegment 实体，填充元数据
         for (int i = 0; i < segments.size(); i++) {
             TextSegment segment = segments.get(i);
             KnowledgeSegment knowledgeSegment = new KnowledgeSegment();
@@ -182,43 +222,56 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             metadata.put(MetadataKeyConstant.FILE_NAME, document.getDocTitle());
             metadata.put(MetadataKeyConstant.URL, document.getDocUrl());
 
-            //todo metadata统一处理(权限相关、多版本相关）
+            // todo: metadata 统一处理（权限相关、多版本相关）
             knowledgeSegment.setMetadata(JSON.toJSONString(metadata.toMap()));
             knowledgeSegment.setDocumentId(document.getDocId());
             knowledgeSegment.setChunkOrder(i);
 
-            // 检查是否需要跳过嵌入
+            // 根据分段器标记决定是否跳过向量嵌入（如表头行等）
             Integer skipEmbedding = metadata.getInteger(MetadataKeyConstant.SKIP_EMBEDDING);
             if (skipEmbedding != null && skipEmbedding == 1) {
                 knowledgeSegment.setSkipEmbedding(1);
-                knowledgeSegment.setStatus(SegmentStatus.STORED);
             } else {
                 knowledgeSegment.setSkipEmbedding(0);
-                knowledgeSegment.setStatus(SegmentStatus.STORED);
             }
+            knowledgeSegment.setStatus(SegmentStatus.STORED);
 
             knowledgeSegments.add(knowledgeSegment);
         }
 
-        // 5. 批量保存片段
+        // Step 5: 批量保存分段并更新文档状态
         Stopwatch stopwatch = Stopwatch.createStarted();
         boolean saveResult = knowledgeSegmentService.saveBatch(knowledgeSegments);
         Assert.isTrue(saveResult, "保存知识片段失败");
-        log.info("保存知识片段耗时: {}", stopwatch.elapsed().toMillis());
+        log.info("保存知识片段耗时: {} ms", stopwatch.elapsed().toMillis());
 
         int segmentCount = knowledgeSegments.size();
 
-        // 6. 更新文档状态为 CHUNKED
         document.setStatus(DocumentStatus.CHUNKED);
         boolean updateResult = knowledgeDocumentService.updateById(document);
         Assert.isTrue(updateResult, "更新文档状态失败");
 
-        // 发送文档已分段事件
+        // Step 6: 发布文档已分段事件，触发下游（如自动向量化）
         publishChunkedEvent(document, segmentCount);
 
         return segmentCount;
     }
 
+    /**
+     * 向量嵌入与存储流程：
+     * 1. 分页拉取文档下所有待嵌入的 KnowledgeSegment（状态 STORED 且未嵌入）
+     * 2. 调用 Embedding 模型将分段文本转为向量
+     * 3. 将向量存入 Elasticsearch
+     * 4. 回写 embeddingId 并更新分段状态为 VECTOR_STORED
+     * 5. 全部成功后更新文档状态为 VECTOR_STORED
+     * <p>
+     * 幂等处理：文档已是 VECTOR_STORED 直接返回 true。
+     * 使用分页遍历避免大数据量内存溢出，每批 100 条。
+     * 最后 double check 确保没有遗漏的分段。
+     *
+     * @param document 文档实体
+     * @return true-全部嵌入完成，false-存在未成功嵌入的分段
+     */
     @Override
     @DistributeLock(scene = "document-split", keyExpression = "#document.docId", waitTime = 0)
     public boolean embedAndStore(KnowledgeDocument document) {
@@ -226,35 +279,41 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             return false;
         }
 
+        // 幂等：已向量化则直接返回成功
         if (document.getStatus() == DocumentStatus.VECTOR_STORED) {
             return true;
         }
 
+        // 只有 CHUNKED 状态的文档才能进行向量化
         if (document.getStatus() != DocumentStatus.CHUNKED) {
             return false;
         }
 
-        // 分页扫描全部document_id为docId且status为STORED的文档片段
+        // 构建查询条件：当前文档下、状态为 STORED、尚未嵌入、且不跳过嵌入的分段
         LambdaQueryWrapper<KnowledgeSegment> queryWrapper = Wrappers.<KnowledgeSegment>lambdaQuery()
                 .eq(KnowledgeSegment::getDocumentId, document.getDocId())
                 .eq(KnowledgeSegment::getStatus, SegmentStatus.STORED)
                 .isNull(KnowledgeSegment::getEmbeddingId)
                 .eq(KnowledgeSegment::getSkipEmbedding, 0);
 
+        // 分页遍历，每批 100 条
         Page<KnowledgeSegment> page = knowledgeSegmentService.page(new Page<>(1, 100), queryWrapper);
 
         while (page.getCurrent() == 1 || page.hasNext()) {
             List<KnowledgeSegment> textSegmentsToEmbed = page.getRecords();
-            List<TextSegment> textSegments = textSegmentsToEmbed.stream().map(segment -> TextSegment.from(segment.getText(), Metadata.from(segment.getMetadataMap()))).toList();
-            // 获取嵌入向量
+
+            // Step 2: 将分段转为 LangChain4j TextSegment，调用 Embedding 模型
+            List<TextSegment> textSegments = textSegmentsToEmbed.stream()
+                    .map(segment -> TextSegment.from(segment.getText(), Metadata.from(segment.getMetadataMap())))
+                    .toList();
             Response<List<Embedding>> embeddingResponse = openAiEmbeddingModel.embedAll(textSegments);
 
-            // 存储嵌入向量
+            // Step 3: 将向量批量写入 Elasticsearch
             List<String> embeddingIds = elasticsearchEmbeddingStore.addAll(embeddingResponse.content(), textSegments);
 
-            //todo 事务处理
+            // todo: 事务处理 — embedding 写入 ES 和 DB 状态更新应保证一致性
 
-            // 更新文档片段状态
+            // Step 4: 回写 embeddingId 并更新分段状态
             for (int i = 0; i < textSegmentsToEmbed.size(); i++) {
                 String embeddingId = embeddingIds.get(i);
                 KnowledgeSegment knowledgeSegment = textSegmentsToEmbed.get(i);
@@ -263,19 +322,18 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
                 knowledgeSegmentService.updateById(knowledgeSegment);
             }
 
-            // 继续扫描下一页
+            // 翻页继续处理
             page = knowledgeSegmentService.page(new Page<>(page.getCurrent() + 1, 100), queryWrapper);
         }
 
-        //double check
+        // Step 5: double check — 确认无遗漏分段后，更新文档状态
         long segmentCount = knowledgeSegmentService.count(queryWrapper);
         if (segmentCount == 0) {
-            // 更新文档状态
             document.setStatus(DocumentStatus.VECTOR_STORED);
             return knowledgeDocumentService.updateById(document);
         }
 
-        log.warn("向量存储失败，存在部分分段没有存储成功，未成功的数量： " + segmentCount);
+        log.warn("向量存储失败，存在部分分段没有存储成功，未成功的数量：{}", segmentCount);
         return false;
     }
 

@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 
 /**
  * 意图识别结果
- *
+ * 包含意图分类、汽车领域相关性判断及关键实体提取
  */
 public record IntentRecognitionResult(
         @JsonPropertyDescription("意图识别的推断理由")

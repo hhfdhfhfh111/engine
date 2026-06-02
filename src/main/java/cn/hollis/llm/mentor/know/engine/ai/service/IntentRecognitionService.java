@@ -8,7 +8,7 @@ import dev.langchain4j.service.spring.AiService;
 
 /**
  * 意图识别服务
- *
+ * 基于 LangChain4j AiService 实现，通过系统提示词自动识别用户意图
  */
 public interface IntentRecognitionService {
 

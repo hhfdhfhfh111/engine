@@ -7,7 +7,7 @@ import java.lang.annotation.Target;
 
 /**
  * 分布式锁注解
- *
+ * 基于 Redisson 实现，支持场景隔离、SpEL 表达式和自动续期
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
